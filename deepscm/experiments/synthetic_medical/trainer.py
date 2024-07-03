@@ -1,6 +1,7 @@
 from deepscm.experiments.synthetic_medical import synth  # noqa: F401
 from deepscm.experiments.synthetic_medical.base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
 
+
 if __name__ == '__main__':
     from pytorch_lightning import Trainer
     from pytorch_lightning.loggers import TensorBoardLogger
@@ -32,10 +33,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args(other_args)
 
-    # if args.gpus is not None and isinstance(args.gpus, int):
-    #     # Make sure that it only uses a single GPU..
-    #     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpus)
-    #     args.gpus = 3
 
     if args.gpus is not None and isinstance(args.gpus, int):
         args.gpus = [args.gpus]

@@ -66,7 +66,7 @@ class ConditionalVISEM(BaseVISEM):
 
     @pyro_method
     def model(self):
-        age, sex, ventricle_volume, brain_volume = self.pgm_model()
+        age, sex, ventricle_volume, brain_volume = self.pgm_model() # TODO check why sex is always 0
 
         ventricle_volume_ = self.ventricle_volume_flow_constraint_transforms.inv(ventricle_volume)
         brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)

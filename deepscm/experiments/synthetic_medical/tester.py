@@ -1,8 +1,14 @@
-from . import synth  # noqa: F401
-from .base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
+from deepscm.experiments.synthetic_medical import synth  # noqa: F401
+from deepscm.experiments.synthetic_medical.base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
 
 import torch
 import inspect
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 
 
 if __name__ == '__main__':
@@ -22,7 +28,8 @@ if __name__ == '__main__':
 
     print(f'using checkpoint {checkpoint_path}')
 
-    hparams = torch.load(checkpoint_path, map_location=torch.device('cpu'))['hparams']
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device('cuda'))
+    hparams = checkpoint['hyper_parameters']
 
     print(f'found hparams: {hparams}')
 
@@ -37,9 +44,7 @@ if __name__ == '__main__':
     args = parser.parse_args(other_args)
 
     if args.gpus is not None and isinstance(args.gpus, int):
-        # Make sure that it only uses a single GPU..
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpus)
-        args.gpus = 1
+        args.gpus = [args.gpus]
 
     # TODO: push to lightning
     args.gradient_clip_val = float(args.gradient_clip_val)
@@ -65,8 +70,9 @@ if __name__ == '__main__':
     print(f'building model with params: {model_params}')
 
     model = model_class(**model_params)
-
-    experiment = exp_class.load_from_checkpoint(checkpoint_path, pyro_model=model)
+    
+    kwargs = {'hparams': dotdict(hparams), 'pyro_model':model}
+    experiment = exp_class._load_model_state(checkpoint, **kwargs)
 
     print(f'Loaded {experiment.__class__}:\n{experiment}')
 

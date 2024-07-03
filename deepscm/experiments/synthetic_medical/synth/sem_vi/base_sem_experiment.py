@@ -23,6 +23,10 @@ import numpy as np
 
 from deepscm.experiments.synthetic_medical.base_experiment import BaseCovariateExperiment, BaseSEM, EXPERIMENT_REGISTRY, MODEL_REGISTRY  # noqa: F401
 
+def tuple_type(strings):
+    strings = strings.replace("(", "").replace(")", "")
+    mapped_int = map(int, strings.split(","))
+    return tuple(mapped_int)
 
 class CustomELBO(TraceGraph_ELBO):
     def __init__(self, *args, **kwargs):
@@ -51,25 +55,27 @@ class Lambda(torch.nn.Module):
 class BaseVISEM(BaseSEM):
     context_dim = 0
 
-    def __init__(self, latent_dim: int, logstd_init: float = -5, enc_filters: str = '16,32,64,128,256,512', dec_filters: str = '512,256,128,64,32,16',
-                 num_convolutions: int = 2, use_upconv: bool = False, decoder_type: str = 'fixed_var', decoder_cov_rank: int = 10, **kwargs):
+    def __init__(self, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,128,192,128), blocks: tuple = (1,2,4,6,8),
+                use_upconv: bool = False, decoder_type: str = 'fixed_var', decoder_cov_rank: int = 10, **kwargs):
         super().__init__(**kwargs)
 
-        self.img_shape = (1, 128 // self.downsample, 192 // self.downsample, 128 // self.downsample) if self.downsample > 0 else (1, 128, 192, 128)
+        self.img_shape = image_shape
 
         self.latent_dim = latent_dim
         self.logstd_init = logstd_init
+        
+        self.blocks = blocks
+        self.ch_multi = ch_multi
+        self.latent_channels = latent_dim
 
-        self.enc_filters = tuple(int(f.strip()) for f in enc_filters.split(','))
-        self.dec_filters = tuple(int(f.strip()) for f in dec_filters.split(','))
-        self.num_convolutions = num_convolutions
         self.use_upconv = use_upconv
         self.decoder_type = decoder_type
         self.decoder_cov_rank = decoder_cov_rank
 
         # decoder parts
         channel_in=1
-        decoder = Decoder3D(channel_in, ch=16, blocks=(1,2,4,8, 16), latent_channels=64, image_shape=(1,128,192,128),
+        
+        decoder = Decoder3D(channel_in, ch=ch_multi, blocks=self.blocks, latent_dim=self.latent_dim, latent_channels=self.latent_channels, image_shape=self.img_shape,
                                num_res_blocks=1, norm_type="bn", deep_model=False)
 
         if self.decoder_type == 'fixed_var':
@@ -130,9 +136,8 @@ class BaseVISEM(BaseSEM):
             raise ValueError('unknown  ')
 
         # encoder parts
-        channel_in=1
         latent_channels = 64
-        self.encoder = Encoder3D(channel_in, ch=16, blocks=(1,2,4,8, 16), latent_channels=latent_channels, image_shape=(1,128,192,128),
+        self.encoder = Encoder3D(channel_in=1, ch=self.ch_multi, blocks=self.blocks, latent_dim=self.latent_dim, latent_channels=latent_channels, image_shape=self.img_shape,
                                num_res_blocks=1, norm_type="bn", deep_model=False)
 
         latent_layers = torch.nn.Sequential(torch.nn.Linear(self.latent_dim + self.context_dim, self.latent_dim), torch.nn.ReLU())
@@ -205,7 +210,7 @@ class BaseVISEM(BaseSEM):
 
     def _get_transformed_x_dist(self, latent):
         x_pred_dist = self.decoder.predict(latent)
-        x_base_dist = Normal(self.x_base_loc, self.x_base_scale).to_event(3)
+        x_base_dist = Normal(self.x_base_loc, self.x_base_scale).to_event(4) # TODO to_event(3)
 
         preprocess_transform = self._get_preprocess_transforms()
 
@@ -215,7 +220,7 @@ class BaseVISEM(BaseSEM):
             x_reparam_transform = ComposeTransform([reshape_transform, chol_transform, reshape_transform.inv])
         elif isinstance(x_pred_dist, Independent):
             x_pred_dist = x_pred_dist.base_dist
-            x_reparam_transform = AffineTransform(x_pred_dist.loc, x_pred_dist.scale, 3)
+            x_reparam_transform = AffineTransform(x_pred_dist.loc, x_pred_dist.scale, 4) # TODO 3
 
         return TransformedDistribution(x_base_dist, ComposeTransform([x_reparam_transform, preprocess_transform]))
 
@@ -287,16 +292,15 @@ class BaseVISEM(BaseSEM):
         parser = super().add_arguments(parser)
 
         parser.add_argument('--latent_dim', default=100, type=int, help="latent dimension of model (default: %(default)s)")
+        parser.add_argument('--blocks', default=(1,2,4,8,16,16), type=tuple_type, help="lr of deep part (default: %(default)s)")
+        parser.add_argument('--ch_multi', default=32, type=int, help="lr of deep part (default: %(default)s)")
+        
         parser.add_argument('--logstd_init', default=-5, type=float, help="init of logstd (default: %(default)s)")
-        parser.add_argument('--enc_filters', default='16,24,32,64,128,256', type=str, help="number of filters to use (default: %(default)s)")
-        parser.add_argument('--dec_filters', default='256,128,64,32,24,16', type=str, help="number of filters to use (default: %(default)s)")
-        parser.add_argument('--num_convolutions', default=3, type=int, help="number of convolutions to build model (default: %(default)s)")
-        parser.add_argument('--use_upconv', default=False, action='store_true', help="toogle upconv (default: %(default)s)")
-        parser.add_argument(
-            '--decoder_type', default='fixed_var', help="var type (default: %(default)s)",
+        parser.add_argument('--decoder_type', default='fixed_var', help="var type (default: %(default)s)",
             choices=['fixed_var', 'learned_var', 'independent_gaussian', 'sharedvar_multivariate_gaussian', 'multivariate_gaussian',
                      'sharedvar_lowrank_multivariate_gaussian', 'lowrank_multivariate_gaussian'])
         parser.add_argument('--decoder_cov_rank', default=10, type=int, help="rank for lowrank cov approximation (requires lowrank decoder) (default: %(default)s)")  # noqa: E501
+
 
         return parser
 

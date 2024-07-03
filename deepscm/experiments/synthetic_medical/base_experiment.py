@@ -165,18 +165,16 @@ class BaseCovariateExperiment(pl.LightningModule):
             pyro.enable_validation()
 
     def prepare_data(self):
-        #downsample = None if self.hparams.downsample == -1 else self.hparams.downsample
-        #train_crop_type = self.hparams.train_crop_type if hasattr(self.hparams, 'train_crop_type') else 'random'
-        self.synth_train = NvidiaDataset()  # noqa: E501 #TODO:
-        self.synth_val = NvidiaDataset() #TODO:
-        self.synth_test = NvidiaDataset() #TODO:
+        self.synth_train = NvidiaDataset(train=True)  # noqa: E501 #TODO:
+        self.synth_val = NvidiaDataset(train=False) 
+        self.synth_test = NvidiaDataset(train=False) 
 
         self.torch_device = self.trainer.root_gpu if self.trainer.on_gpu else self.trainer.root_device
 
         # TODO: change ranges and decide what to condition on
-        brain_volumes = 800000. + 300000 * torch.arange(3, dtype=torch.float, device=self.torch_device)
+        brain_volumes = 0.33*torch.arange(3, dtype=torch.float, device=self.torch_device)
         self.brain_volume_range = brain_volumes.repeat(3).unsqueeze(1)
-        ventricle_volumes = 10000. + 50000 * torch.arange(3, dtype=torch.float, device=self.torch_device)
+        ventricle_volumes = 0.33*torch.arange(3, dtype=torch.float, device=self.torch_device)
         self.ventricle_volume_range = ventricle_volumes.repeat_interleave(3).unsqueeze(1)
         self.z_range = torch.randn([1, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat((9, 1))
 
@@ -198,14 +196,15 @@ class BaseCovariateExperiment(pl.LightningModule):
         pass
 
     def train_dataloader(self):
-        return DataLoader(self.synth_train, batch_size=self.train_batch_size, num_workers=20, shuffle=True)
+        return DataLoader(self.synth_train, batch_size=self.train_batch_size, num_workers=40, shuffle=True)
 
     def val_dataloader(self):
-        self.val_loader = DataLoader(self.synth_val, batch_size=self.test_batch_size, num_workers=20, shuffle=False)
+        self.synth_val = NvidiaDataset(train=False) 
+        self.val_loader = DataLoader(self.synth_val, batch_size=self.test_batch_size, num_workers=40, shuffle=False)
         return self.val_loader
 
     def test_dataloader(self):
-        self.test_loader = DataLoader(self.synth_test, batch_size=self.test_batch_size, shuffle=False)
+        self.test_loader = DataLoader(self.synth_test, batch_size=self.test_batch_size, num_workers=40, shuffle=False)
         return self.test_loader
 
     def forward(self, *args, **kwargs):
@@ -317,21 +316,21 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def get_counterfactual_conditions(self, batch):
         counterfactuals = {
-            'do(brain_volume=800000)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 800000},
-            'do(brain_volume=1200000)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1200000},
-            'do(brain_volume=1600000)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1600000},
-            'do(ventricle_volume=10000)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 10000},
-            'do(ventricle_volume=50000)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 50000},
-            'do(ventricle_volume=110000)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 110000},
-            'do(age=40)': {'age': torch.ones_like(batch['age']) * 40},
+            #'do(brain_volume=0)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0},
+            'do(brain_volume=0.5)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.2},
+            'do(brain_volume=1.0)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.8},
+            #'do(ventricle_volume=0)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0},
+            'do(ventricle_volume=0.5)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.2},
+            'do(ventricle_volume=1.0)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.8},
+            'do(age=45)': {'age': torch.ones_like(batch['age']) * 45},
             'do(age=80)': {'age': torch.ones_like(batch['age']) * 80},
-            'do(age=120)': {'age': torch.ones_like(batch['age']) * 120},
+            #'do(age=120)': {'age': torch.ones_like(batch['age']) * 120},
             'do(sex=0)': {'sex': torch.zeros_like(batch['sex'])},
             'do(sex=1)': {'sex': torch.ones_like(batch['sex'])},
-            'do(brain_volume=800000, ventricle_volume=224)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 800000,
-                                                              'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 110000},
-            'do(brain_volume=1600000, ventricle_volume=10000)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1600000,
-                                                                 'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 10000}
+            'do(brain_volume=1, ventricle_volume=1)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1,
+                                                              'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 1},
+            'do(brain_volume=0.5, ventricle_volume=0.5)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.5,
+                                                                 'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.5}
         }
 
         return counterfactuals
@@ -357,7 +356,9 @@ class BaseCovariateExperiment(pl.LightningModule):
     def get_batch(self, loader):
         batch = next(iter(self.val_loader))
         if self.trainer.on_gpu:
-            batch = self.trainer.accelerator_backend.to_device(batch) # self.torch_device
+            #batch = self.trainer.accelerator_backend.to_device(batch) # self.torch_device
+            for key, value in batch.items():
+                batch[key] = batch[key].to(self.torch_device)
         return batch
 
     def log_kdes(self, tag, data, save_img=False):
@@ -394,8 +395,10 @@ class BaseCovariateExperiment(pl.LightningModule):
         obs = {'x': x, 'age': age, 'sex': sex, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume}
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
-        #self.log_img_grid(tag, torch.cat([x, recon], 0)) # TODO
-        self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3))), self.current_epoch)
+        self.log_img_grid(tag, torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0)) # TODO
+        #self.log_img_grid(tag, torch.cat([x[:,:,:,x.shape[-2]//2,:], recon[:,:,:,recon.shape[-2]//2,:]], 0)) # TODO
+        #self.log_img_grid(tag, torch.cat([x[:,:,x.shape[-3]//2,:,:], recon[:,:,recon.shape[-3]//2,:,:]], 0)) # TODO
+        self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3, 4))), self.current_epoch) # TODO 1,2,3 added:
 
     def build_counterfactual(self, tag, obs, conditions, absolute=None):
         _required_data = ('x', 'age', 'sex', 'ventricle_volume', 'brain_volume')
@@ -453,8 +456,8 @@ class BaseCovariateExperiment(pl.LightningModule):
 
             exogeneous = self.pyro_model.infer(**obs_batch)
 
-            for (tag, val) in exogeneous.items():
-                self.logger.experiment.add_histogram(tag, val, self.current_epoch)
+            # for (tag, val) in exogeneous.items():
+            #     self.logger.experiment.add_histogram(tag, val, self.current_epoch) # TODO
 
             obs_batch = {k: v[:8] for k, v in obs_batch.items()}
 
@@ -464,7 +467,7 @@ class BaseCovariateExperiment(pl.LightningModule):
                 self.build_reconstruction(**obs_batch)
 
             conditions = {
-                '40': {'age': torch.zeros_like(obs_batch['age']) + 40},
+                '45': {'age': torch.zeros_like(obs_batch['age']) + 45},
                 '60': {'age': torch.zeros_like(obs_batch['age']) + 60},
                 '80': {'age': torch.zeros_like(obs_batch['age']) + 80}
             }
@@ -477,34 +480,35 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.build_counterfactual('do(sex=x)', obs=obs_batch, conditions=conditions)
 
             conditions = {
-                '800000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 800000},
-                '1100000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1100000},
-                '1400000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1400000},
-                '1600000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1600000}
+                '0': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0},
+                '0.25': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0.25},
+                '0.5': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0.5},
+                '1': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1}
             }
             self.build_counterfactual('do(brain_volume=x)', obs=obs_batch, conditions=conditions, absolute='brain_volume')
 
             conditions = {
-                '10000': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 10000},
-                '25000': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 25000},
-                '50000': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 50000},
-                '75000': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 75000},
-                '110000': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 110000}
+                '0': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0},
+                '0.25': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.25},
+                '0.5': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.5},
+                '0.75': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.75},
+                '1.0': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 1.0}
             }
             self.build_counterfactual('do(ventricle_volume=x)', obs=obs_batch, conditions=conditions, absolute='ventricle_volume')
 
     @classmethod
     def add_arguments(cls, parser):
-        parser.add_argument('--data_dir', default="/vol/biomedic2/bglocker/gemini/UKBB/t0/", type=str, help="data dir (default: %(default)s)")  # noqa: E501
-        parser.add_argument('--split_dir', default="/vol/biomedic2/np716/data/gemini/ukbb/ventricle_brain/", type=str, help="split dir (default: %(default)s)")  # noqa: E501
-        parser.add_argument('--sample_img_interval', default=10, type=int, help="interval in which to sample and log images (default: %(default)s)")
+        #parser.add_argument('--data_dir', default="/vol/biomedic2/bglocker/gemini/UKBB/t0/", type=str, help="data dir (default: %(default)s)")  # noqa: E501
+        #parser.add_argument('--split_dir', default="/vol/biomedic2/np716/data/gemini/ukbb/ventricle_brain/", type=str, help="split dir (default: %(default)s)")  # noqa: E501
+        parser.add_argument('--sample_img_interval', default=1, type=int, help="interval in which to sample and log images (default: %(default)s)")
         parser.add_argument('--train_batch_size', default=4, type=int, help="train batch size (default: %(default)s)")
         parser.add_argument('--test_batch_size', default=4, type=int, help="test batch size (default: %(default)s)")
-        parser.add_argument('--validate', default=False, action='store_true', help="whether to validate (default: %(default)s)")
+        parser.add_argument('--validate', default=False, type=bool, help="whether to validate (default: %(default)s)")
         parser.add_argument('--lr', default=1e-4, type=float, help="lr of deep part (default: %(default)s)")
         parser.add_argument('--pgm_lr', default=5e-3, type=float, help="lr of pgm (default: %(default)s)")
         parser.add_argument('--l2', default=0., type=float, help="weight decay (default: %(default)s)")
         parser.add_argument('--use_amsgrad', default=False, action='store_true', help="use amsgrad? (default: %(default)s)")
         parser.add_argument('--train_crop_type', default='random', choices=['random', 'center'], help="how to crop training images (default: %(default)s)")
+
 
         return parser

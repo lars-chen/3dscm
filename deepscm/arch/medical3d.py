@@ -12,9 +12,36 @@ def get_norm_layer(channels, norm_type="bn"):
         return nn.GroupNorm(8, channels, eps=1e-4)
     else:
         ValueError("norm_type must be bn or gn")
+        
+class SE(nn.Module):
+    """
+    Squeeze-and-Excitation 
+    """
+    def __init__(self, channel, reduction_ratio=4):
+        super(SE, self).__init__()
+        
+        ### Global Average Pooling
+        self.gap = nn.AdaptiveAvgPool3d(1)
+        
+        ### Fully Connected Multi-Layer Perceptron (FC-MLP)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction_ratio, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction_ratio, channel, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.gap(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
 
 
 class ds_Conv3d(nn.Module):
+    """
+    Depthwise-Seperable 3D Convolution
+    """
     def __init__(self, nin, nout, kernel_size=3, stride=1, padding=1, kernels_per_layer=1):
         super(ds_Conv3d, self).__init__()
         self.depthwise = nn.Conv3d(nin, nin * kernels_per_layer, kernel_size=kernel_size, stride=stride, padding=padding, groups=nin)
@@ -41,6 +68,8 @@ class ResDown(nn.Module):
         self.conv2 = nn.Conv3d(channel_out // 2, channel_out, kernel_size, 1, kernel_size // 2)
 
         self.act_fnc = nn.SiLU()
+        
+        self.SE = SE(channel_out)
         self.channel_out = channel_out
 
     def forward(self, x):
@@ -53,6 +82,7 @@ class ResDown(nn.Module):
 
         x = self.act_fnc(self.norm2(x))
         x = self.conv2(x)
+        x = self.SE(x)
 
         return x + skip
 
@@ -67,14 +97,15 @@ class ResUp(nn.Module):
         self.norm1 = get_norm_layer(channel_in, norm_type=norm_type)
 
         self.conv1 = ds_Conv3d(channel_in, (channel_in // 2) + channel_out, kernel_size=kernel_size, stride=1, padding=kernel_size // 2)
-        #self.conv1 = nn.Conv3d(channel_in, (channel_in // 2) + channel_out, kernel_size, 1, kernel_size // 2)
         self.norm2 = get_norm_layer(channel_in // 2, norm_type=norm_type)
 
         self.conv2 = ds_Conv3d(channel_in // 2, channel_out, kernel_size=kernel_size, stride=1, padding=kernel_size // 2)
-        #self.conv2 = nn.Conv3d(channel_in // 2, channel_out, kernel_size, 1, kernel_size // 2)
 
         self.up_nn = nn.Upsample(scale_factor=scale_factor, mode="nearest")
         self.act_fnc = nn.SiLU()
+        
+        self.SE = SE(channel_out)
+
         self.channel_out = channel_out
 
     def forward(self, x_in):
@@ -87,7 +118,8 @@ class ResUp(nn.Module):
 
         x = self.act_fnc(self.norm2(x))
         x = self.conv2(x)
-
+        x = self.SE(x)
+        
         return x + skip
 
 
@@ -112,6 +144,9 @@ class ResBlock(nn.Module):
         self.act_fnc = nn.SiLU()
         self.skip = channel_in == channel_out
         self.bttl_nk = channel_in // 2
+        
+        self.SE = SE(channel_out)
+
 
     def forward(self, x_in):
         x = self.act_fnc(self.norm1(x_in))
@@ -127,6 +162,7 @@ class ResBlock(nn.Module):
 
         x = self.act_fnc(self.norm2(x))
         x = self.conv2(x)
+        x = self.SE(x)
 
         return x + skip
 
@@ -136,12 +172,12 @@ class Encoder3D(nn.Module):
     Encoder block
     """
 
-    def __init__(self, channels, ch=64, blocks=(1, 2, 4, 8, 16), latent_dim = 512, latent_channels=64, image_shape=(1, 128, 192, 128), num_res_blocks=1, norm_type="bn",
+    def __init__(self, channel_in, ch, blocks, latent_dim, latent_channels, image_shape, num_res_blocks=1, norm_type="bn",
                  deep_model=False):
         super(Encoder3D, self).__init__()
-        
+        self.ch = ch
         self.image_shape = image_shape
-        self.conv_in = nn.Conv3d(channels, blocks[0] * ch, 3, 1, 1)
+        self.conv_in = nn.Conv3d(channel_in, blocks[0] * self.ch, 3, 1, 1)
         self.latent_channels = latent_channels
         self.latent_dim = latent_dim
 
@@ -154,7 +190,7 @@ class Encoder3D(nn.Module):
 
             if deep_model:
                 # Add an additional non down-sampling block before down-sampling
-                self.layer_blocks.append(ResBlock(w_in * ch, w_in * ch, norm_type=norm_type))
+                self.layer_blocks.append(ResBlock(w_in * self.ch, w_in * self.ch, norm_type=norm_type))
 
             self.layer_blocks.append(ResDown(w_in * ch, w_out * ch, norm_type=norm_type))
 
@@ -162,7 +198,7 @@ class Encoder3D(nn.Module):
             self.layer_blocks.append(ResBlock(widths_out[-1] * ch, widths_out[-1] * ch, norm_type=norm_type))
 
         #self.conv_mu = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1) # TODO k=1
-        #self.conv_log_var = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1) # TODO k=1
+        #self.conv_log_var = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1)
         
         self.final_conv = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1) # 64 --> latent_channels
         
@@ -181,7 +217,7 @@ class Encoder3D(nn.Module):
         eps = torch.randn_like(std) 
         return mu + eps * std
 
-    def forward(self, x, sample=False):
+    def forward(self, x):
         x = self.conv_in(x.type(torch.float32))
 
         for block in self.layer_blocks:
@@ -201,7 +237,7 @@ class Decoder3D(nn.Module):
     Built to be a mirror of the encoder block
     """
 
-    def __init__(self, channels, ch=64, blocks=(1, 2, 4, 8, 16), latent_dim = 512, latent_channels=64, image_shape=(1, 128, 192, 128), num_res_blocks=1, norm_type="bn",
+    def __init__(self, channels, ch, blocks, latent_dim, latent_channels, image_shape, num_res_blocks=1, norm_type="bn",
                  deep_model=False):
         super(Decoder3D, self).__init__()
 
@@ -213,7 +249,8 @@ class Decoder3D(nn.Module):
         
         self.intermediate_shape = np.array(self.image_shape ) / (2**len(blocks))
         self.intermediate_shape[0] = latent_channels
-        
+        self.ch = ch
+
         self.fc_in = nn.Sequential(
             nn.Linear(latent_dim+2, int(np.prod(self.intermediate_shape))),
             nn.BatchNorm1d(int(np.prod(self.intermediate_shape))), 
@@ -223,19 +260,19 @@ class Decoder3D(nn.Module):
         self.intermediate_shape = np.array(image_shape)//(2**len(blocks))
         self.intermediate_shape[0] = self.latent_channels
 
-        self.conv_in = ds_Conv3d(latent_channels, widths_in[0] * ch, kernel_size=1, stride=1, padding=0)
+        self.conv_in = ds_Conv3d(latent_channels, widths_in[0] * self.ch, kernel_size=1, stride=1, padding=0)
 
         self.layer_blocks = nn.ModuleList([])
         for _ in range(num_res_blocks):
-            self.layer_blocks.append(ResBlock(widths_in[0] * ch, widths_in[0] * ch, norm_type=norm_type))
+            self.layer_blocks.append(ResBlock(widths_in[0] * self.ch, widths_in[0] * ch, norm_type=norm_type))
 
         for w_in, w_out in zip(widths_in, widths_out):
-            self.layer_blocks.append(ResUp(w_in * ch, w_out * ch, norm_type=norm_type))
+            self.layer_blocks.append(ResUp(w_in * self.ch, w_out * self.ch, norm_type=norm_type))
             if deep_model:
                 # Add an additional non up-sampling block after up-sampling
-                self.layer_blocks.append(ResBlock(w_out * ch, w_out * ch, norm_type=norm_type))
+                self.layer_blocks.append(ResBlock(w_out * self.ch, w_out * self.ch, norm_type=norm_type))
 
-        self.conv_out = ds_Conv3d(blocks[0] * ch, channels, kernel_size=5, stride=1, padding=2)
+        self.conv_out = ds_Conv3d(blocks[0] * self.ch, channels, kernel_size=5, stride=1, padding=2)
         self.act_fnc = nn.ELU()
 
     def forward(self, x):
@@ -248,30 +285,4 @@ class Decoder3D(nn.Module):
             x = block(x)
         x = self.act_fnc(x)
 
-        return torch.tanh(self.conv_out(x))
-
-
-class VAE(nn.Module):
-    """
-    VAE network, uses the above encoder and decoder blocks
-    """
-    def __init__(self, channel_in=1, ch=64, blocks=(1, 2, 4, 8, 16), image_shape=(1, 128, 192, 128), latent_channels=64, num_res_blocks=1, norm_type="bn",
-                 deep_model=False):
-        super(VAE, self).__init__()
-        """Res VAE Network
-        channel_in  = number of channels of the image 
-        z = the number of channels of the latent representation
-        (for a 64x64 image this is the size of the latent vector)
-        """
-        self.image_shape = image_shape
-        
-        self.encoder = Encoder3D(channel_in, ch=ch, blocks=blocks, latent_channels=latent_channels, image_shape=image_shape,
-                               num_res_blocks=num_res_blocks, norm_type=norm_type, deep_model=deep_model)
-        self.decoder = Decoder3D(channel_in, ch=ch, blocks=blocks, latent_channels=latent_channels, image_shape=image_shape,
-                               num_res_blocks=num_res_blocks, norm_type=norm_type, deep_model=deep_model)
-
-        
-    def forward(self, x):
-        encoding = self.encoder(x)
-        x = self.decoder(encoding)
-        return x
+        return torch.tanh(self.conv_out(x)) # TODO: probably not tanh!!!
