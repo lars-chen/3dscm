@@ -6,7 +6,7 @@ from pyro.distributions import TransformedDistribution
 from pyro.infer.reparam.transform import TransformReparam
 from torch.distributions import Independent
 
-from deepscm.datasets.synthetic_medical.synth import NvidiaDataset
+from deepscm.datasets.synth import NvidiaDataset
 from pyro.distributions.transforms import ComposeTransform, SigmoidTransform, AffineTransform
 
 import torchvision.utils
@@ -172,10 +172,12 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.torch_device = self.trainer.root_gpu if self.trainer.on_gpu else self.trainer.root_device
 
         # TODO: change ranges and decide what to condition on
-        brain_volumes = 0.33*torch.arange(3, dtype=torch.float, device=self.torch_device)
+        brain_volumes = 800. + 300 * torch.arange(3, dtype=torch.float, device=self.torch_device)
         self.brain_volume_range = brain_volumes.repeat(3).unsqueeze(1)
-        ventricle_volumes = 0.33*torch.arange(3, dtype=torch.float, device=self.torch_device)
+        
+        ventricle_volumes = 10. + 50 * torch.arange(3, dtype=torch.float, device=self.torch_device)
         self.ventricle_volume_range = ventricle_volumes.repeat_interleave(3).unsqueeze(1)
+        
         self.z_range = torch.randn([1, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat((9, 1))
 
         self.pyro_model.age_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['age']).log().mean().to(self.torch_device).float()
@@ -348,9 +350,10 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def log_img_grid(self, tag, imgs, normalize=True, save_img=False, **kwargs):
         if save_img:
+            imgs2d = imgs[:,:,:,imgs.shape[-2]//2,:]
             p = os.path.join(self.trainer.logger.experiment.log_dir, f'{tag}.png')
-            torchvision.utils.save_image(imgs, p)
-        grid = torchvision.utils.make_grid(imgs, normalize=normalize, **kwargs)
+            torchvision.utils.save_image(imgs2d, p)
+        grid = torchvision.utils.make_grid(imgs2d, normalize=normalize, **kwargs)
         self.logger.experiment.add_image(tag, grid, self.current_epoch)
 
     def get_batch(self, loader):
@@ -395,9 +398,9 @@ class BaseCovariateExperiment(pl.LightningModule):
         obs = {'x': x, 'age': age, 'sex': sex, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume}
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
-        self.log_img_grid(tag, torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0)) # TODO
-        #self.log_img_grid(tag, torch.cat([x[:,:,:,x.shape[-2]//2,:], recon[:,:,:,recon.shape[-2]//2,:]], 0)) # TODO
-        #self.log_img_grid(tag, torch.cat([x[:,:,x.shape[-3]//2,:,:], recon[:,:,recon.shape[-3]//2,:,:]], 0)) # TODO
+        self.log_img_grid(tag+'/axial', torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0)) 
+        self.log_img_grid(tag+'/sagittal', torch.cat([x[:,:,:,x.shape[-2]//2,:], recon[:,:,:,recon.shape[-2]//2,:]], 0)) 
+        self.log_img_grid(tag+'/coronal', torch.cat([x[:,:,x.shape[-3]//2,:,:], recon[:,:,recon.shape[-3]//2,:,:]], 0)) 
         self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3, 4))), self.current_epoch) # TODO 1,2,3 added:
 
     def build_counterfactual(self, tag, obs, conditions, absolute=None):
@@ -456,12 +459,12 @@ class BaseCovariateExperiment(pl.LightningModule):
 
             exogeneous = self.pyro_model.infer(**obs_batch)
 
-            # for (tag, val) in exogeneous.items():
-            #     self.logger.experiment.add_histogram(tag, val, self.current_epoch) # TODO
+            for (tag, val) in exogeneous.items():
+                self.logger.experiment.add_histogram(tag, val, self.current_epoch) # TODO
 
             obs_batch = {k: v[:8] for k, v in obs_batch.items()}
 
-            # self.log_img_grid('input', obs_batch['x'], save_img=True) # TODO
+            self.log_img_grid('input', obs_batch['x'], save_img=True) # TODO
 
             if hasattr(self.pyro_model, 'reconstruct'):
                 self.build_reconstruction(**obs_batch)
@@ -480,19 +483,17 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.build_counterfactual('do(sex=x)', obs=obs_batch, conditions=conditions)
 
             conditions = {
-                '0': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0},
-                '0.25': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0.25},
-                '0.5': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 0.5},
-                '1': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1}
+                '1200': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1100},
+                '1400': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1400},
+                '1700': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1600}
             }
+            
             self.build_counterfactual('do(brain_volume=x)', obs=obs_batch, conditions=conditions, absolute='brain_volume')
 
             conditions = {
-                '0': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0},
-                '0.25': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.25},
-                '0.5': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.5},
-                '0.75': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 0.75},
-                '1.0': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 1.0}
+                '10': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 10},
+                '50': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 50},
+                '110': {'ventricle_volume': torch.zeros_like(obs_batch['ventricle_volume']) + 110}
             }
             self.build_counterfactual('do(ventricle_volume=x)', obs=obs_batch, conditions=conditions, absolute='ventricle_volume')
 

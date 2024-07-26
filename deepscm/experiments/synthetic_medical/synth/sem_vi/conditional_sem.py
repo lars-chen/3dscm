@@ -87,12 +87,8 @@ class ConditionalVISEM(BaseVISEM):
             hidden = self.encoder(x)
 
             ventricle_volume_ = self.ventricle_volume_flow_constraint_transforms.inv(ventricle_volume)
-            # ventricle_volume_ = ventricle_volume_.view(-1,1,1,1,1) #full CNN
-            # ventricle_volume_ = ventricle_volume_.expand((hidden.shape[0],1,hidden.shape[2],hidden.shape[3],hidden.shape[4])) #full CNN
-            
+
             brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)
-            # brain_volume_ = brain_volume_.view(-1,1,1,1,1) #full CNN
-            # brain_volume_ = brain_volume_.expand((hidden.shape[0],1,hidden.shape[2],hidden.shape[3],hidden.shape[4])) #full CNN
 
             hidden = torch.cat([hidden, ventricle_volume_, brain_volume_], 1)
 

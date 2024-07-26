@@ -15,12 +15,17 @@ def resize_data_volume_by_scale(data, scale):
 class  NvidiaDataset(Dataset):
     def __init__(self, data_dir = "../../atrophy_bet", train=True):
         super().__init__()
-        
+
         self.data_dir = data_dir
+        
+        subjects = pd.read_csv(self.data_dir + "/participants.csv")
+        subjects['ventricle_vol'] = subjects['ventricle_vol']/1e3 # convert to ml
+        subjects['brain_vol'] = subjects['brain_vol']/1e3
+        
         if train:
-            self.subjects = pd.read_csv(self.data_dir + "/participants.csv")[:4500] # TODO: change to 4500
+            self.subjects = subjects[:4500] # TODO: change to 4500
         else:
-            self.subjects = pd.read_csv(self.data_dir + "/participants.csv")[4920:].reset_index() # TODO change t0 4500
+            self.subjects = subjects[4920:].reset_index() # TODO change to 4500
         
     def __len__(self):
         return len(self.subjects)
@@ -30,8 +35,8 @@ class  NvidiaDataset(Dataset):
         item = dict()
         item["age"] = self.subjects["age"][index]
         item["sex"] = 1 if self.subjects["sex"][index] == "M" else 0
-        item["brain_volume"] = (self.subjects["brain_vol"][index] - 1100000)/(1800000 - 1100000) # min max normalize
-        item["ventricle_volume"] = (self.subjects["ventricle_vol"][index] - 7000)/(170000 - 7000) # min max normalize
+        item["brain_volume"] = self.subjects["brain_vol"][index]  
+        item["ventricle_volume"] = self.subjects["ventricle_vol"][index] 
     
         # load image
         participant_id = str(self.subjects["subject"][index])

@@ -40,7 +40,7 @@ cmaps = [cm.Reds, cm.Blues, cm.Greens]
 img_cm = 'Greys_r'
 diff_cm = 'seismic'
 
-from deepscm.datasets.synthetic_medical.synth import NvidiaDataset
+from deepscm.datasets.synth import NvidiaDataset
 
 data_dir = f'{UKBB_DATA_PATH}/examples.csv'
 base_path = f'{UKBB_DATA_PATH}/imgs/'
