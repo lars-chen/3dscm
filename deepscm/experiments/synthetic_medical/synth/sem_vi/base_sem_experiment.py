@@ -55,7 +55,7 @@ class Lambda(torch.nn.Module):
 class BaseVISEM(BaseSEM):
     context_dim = 0
 
-    def __init__(self, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,128,192,128), blocks: tuple = (1,2,4,6,8),
+    def __init__(self, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,64,96,64), blocks: tuple = (1,2,4,6,8),
                 use_upconv: bool = False, decoder_type: str = 'fixed_var', decoder_cov_rank: int = 10, **kwargs):
         super().__init__(**kwargs)
 
@@ -142,11 +142,6 @@ class BaseVISEM(BaseSEM):
 
         latent_layers = torch.nn.Sequential(torch.nn.Linear(self.latent_dim + self.context_dim, self.latent_dim), torch.nn.ReLU())
         self.latent_encoder = DeepIndepNormal(latent_layers, self.latent_dim, self.latent_dim)
-        
-        # self.latent_encoder = Conv3dIndepNormal(backbone=torch.nn.Conv3d(latent_channels+2, out_channels=latent_channels, kernel_size=1),
-        #                                         hidden_channels=latent_channels+self.context_dim, 
-        #                                         out_channels=latent_channels+self.context_dim
-        #                                         ) # full CNN
 
         
         # priors

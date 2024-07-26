@@ -32,9 +32,9 @@ class SE(nn.Module):
         )
 
     def forward(self, x):
-        b, c, _, _ = x.size()
+        b, c, _, _, _ = x.size()
         y = self.gap(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
+        y = self.fc(y).view(b, c, 1, 1, 1)
         return x * y.expand_as(x)
 
 

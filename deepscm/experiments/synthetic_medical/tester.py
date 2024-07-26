@@ -67,7 +67,7 @@ if __name__ == '__main__':
                                              or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters)
     }
 
-    print(f'building model with params: {model_params}')
+    #print(f'building model with params: {model_params}')
 
     model = model_class(**model_params)
     
