@@ -25,7 +25,7 @@ class  NvidiaDataset(Dataset):
         if train:
             self.subjects = subjects[:4500] # TODO: change to 4500
         else:
-            self.subjects = subjects[4920:].reset_index() # TODO change to 4500
+            self.subjects = subjects[4500:].reset_index() # TODO change to 4500
         
     def __len__(self):
         return len(self.subjects)
@@ -44,7 +44,7 @@ class  NvidiaDataset(Dataset):
         img_dir = f"{self.data_dir}/{participant_id}.nii.gz"
         img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] #8:212
         img = resize_data_volume_by_scale(img, 0.47)[np.newaxis, :, :, :] #0.94
-        item["image"] = img    
+        item["image"] = (img - img.min())/(img.max() - img.min()) # TODO better normalization scheme...
         return item
     
     @staticmethod

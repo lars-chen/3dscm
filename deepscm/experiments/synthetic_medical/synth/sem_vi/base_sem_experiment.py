@@ -55,12 +55,12 @@ class Lambda(torch.nn.Module):
 class BaseVISEM(BaseSEM):
     context_dim = 0
 
-    def __init__(self, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,64,96,64), blocks: tuple = (1,2,4,6,8),
+    def __init__(self, beta:float, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,64,96,64), blocks: tuple = (1,2,4,6,8),
                 use_upconv: bool = False, decoder_type: str = 'fixed_var', decoder_cov_rank: int = 10, **kwargs):
         super().__init__(**kwargs)
 
         self.img_shape = image_shape
-
+        self.beta = beta
         self.latent_dim = latent_dim
         self.logstd_init = logstd_init
         
@@ -272,8 +272,9 @@ class BaseVISEM(BaseSEM):
         for _ in range(num_particles):
             z = pyro.sample('z', z_dist)
 
-            exogeneous = self.infer_exogeneous(z=z, **obs)
+            exogeneous = self.infer_exogeneous(z=z, **obs) # TODO: understand better
             exogeneous['z'] = z
+            
             # condition on sex if sex isn't included in 'do' as it's a root node and we don't have the exogeneous noise for it yet...
             if 'sex' not in condition.keys():
                 exogeneous['sex'] = obs['sex']
@@ -285,6 +286,8 @@ class BaseVISEM(BaseSEM):
     @classmethod
     def add_arguments(cls, parser):
         parser = super().add_arguments(parser)
+
+        parser.add_argument('--beta', default=1.0, type=float, help="beta parameter for ELBO loss (default: %(default)s)")
 
         parser.add_argument('--latent_dim', default=100, type=int, help="latent dimension of model (default: %(default)s)")
         parser.add_argument('--blocks', default=(1,2,4,8,16,16), type=tuple_type, help="lr of deep part (default: %(default)s)")

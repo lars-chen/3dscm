@@ -65,13 +65,14 @@ class ConditionalVISEM(BaseVISEM):
         return age, sex, ventricle_volume, brain_volume
 
     @pyro_method
-    def model(self):
+    def model(self,):
         age, sex, ventricle_volume, brain_volume = self.pgm_model() # TODO check why sex is always 0
 
         ventricle_volume_ = self.ventricle_volume_flow_constraint_transforms.inv(ventricle_volume)
         brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)
 
-        z = pyro.sample('z', Normal(self.z_loc, self.z_scale).to_event(1))
+        with pyro.poutine.scale(scale=self.beta):
+            z = pyro.sample('z', Normal(self.z_loc, self.z_scale).to_event(1))
 
         latent = torch.cat([z, ventricle_volume_, brain_volume_], 1)
 
@@ -92,9 +93,9 @@ class ConditionalVISEM(BaseVISEM):
 
             hidden = torch.cat([hidden, ventricle_volume_, brain_volume_], 1)
 
-            latent_dist = self.latent_encoder.predict(hidden)
-
-            z = pyro.sample('z', latent_dist)
+            with pyro.poutine.scale(scale=self.beta):
+                latent_dist = self.latent_encoder.predict(hidden)
+                z = pyro.sample('z', latent_dist)
 
         return z
 

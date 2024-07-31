@@ -47,7 +47,7 @@ if __name__ == '__main__':
    
     lightning_args = groups['lightning_options']
 
-    logger = TensorBoardLogger(lightning_args.default_root_dir, name=f'{exp_args.experiment}/{exp_args.model}')
+    logger = TensorBoardLogger(lightning_args.default_root_dir, name=f'{exp_args.experiment}/{exp_args.model}', default_hp_metric=False)
     lightning_args.logger = logger
 
     hparams = groups['experiment']

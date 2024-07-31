@@ -239,26 +239,26 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         sample_trace = pyro.poutine.trace(self.pyro_model.sample).get_trace(self.hparams.test_batch_size)
         samples['unconditional_samples'] = {
-            'x': sample_trace.nodes['x']['value'].cpu(),
-            'brain_volume': sample_trace.nodes['brain_volume']['value'].cpu(),
-            'ventricle_volume': sample_trace.nodes['ventricle_volume']['value'].cpu(),
-            'age': sample_trace.nodes['age']['value'].cpu(),
-            'sex': sample_trace.nodes['sex']['value'].cpu()
+            'x': sample_trace.nodes['x']['value'],#.cpu(),
+            'brain_volume': sample_trace.nodes['brain_volume']['value'],#.cpu(),
+            'ventricle_volume': sample_trace.nodes['ventricle_volume']['value'],#.cpu(),
+            'age': sample_trace.nodes['age']['value'],#.cpu(),
+            'sex': sample_trace.nodes['sex']['value'],#.cpu()
         }
 
-        cond_data = {'brain_volume': self.brain_volume_range, 'ventricle_volume': self.ventricle_volume_range, 'z': self.z_range}
+        #cond_data = {'brain_volume': self.brain_volume_range, 'ventricle_volume': self.ventricle_volume_range, 'z': self.z_range}
         cond_data = {
-            'brain_volume': self.brain_volume_range.repeat(self.hparams.test_batch_size, 1),
-            'ventricle_volume': self.ventricle_volume_range.repeat(self.hparams.test_batch_size, 1),
-            'z': torch.randn([self.hparams.test_batch_size, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat_interleave(9, 0)
+            'brain_volume': self.brain_volume_range.repeat(4, 1), # TODO self.hparams.test_batch_size
+            'ventricle_volume': self.ventricle_volume_range.repeat(4, 1),
+            'z': torch.randn([4, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat_interleave(9, 0) # TODO 9
         }
-        sample_trace = pyro.poutine.trace(pyro.condition(self.pyro_model.sample, data=cond_data)).get_trace(9 * self.hparams.test_batch_size)
+        sample_trace = pyro.poutine.trace(pyro.condition(self.pyro_model.sample, data=cond_data)).get_trace(9 * 4) # TODO 9
         samples['conditional_samples'] = {
-            'x': sample_trace.nodes['x']['value'].cpu(),
-            'brain_volume': sample_trace.nodes['brain_volume']['value'].cpu(),
-            'ventricle_volume': sample_trace.nodes['ventricle_volume']['value'].cpu(),
-            'age': sample_trace.nodes['age']['value'].cpu(),
-            'sex': sample_trace.nodes['sex']['value'].cpu()
+            'x': sample_trace.nodes['x']['value'],#.cpu(),
+            'brain_volume': sample_trace.nodes['brain_volume']['value'],#.cpu(),
+            'ventricle_volume': sample_trace.nodes['ventricle_volume']['value'],#.cpu(),
+            'age': sample_trace.nodes['age']['value'],#.cpu(),
+            'sex': sample_trace.nodes['sex']['value'],#.cpu()
         }
 
         print(f'Got samples: {tuple(samples.keys())}')
@@ -319,20 +319,20 @@ class BaseCovariateExperiment(pl.LightningModule):
     def get_counterfactual_conditions(self, batch):
         counterfactuals = {
             #'do(brain_volume=0)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0},
-            'do(brain_volume=0.5)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.2},
-            'do(brain_volume=1.0)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.8},
+            'do(brain_volume=1000)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1000},
+            'do(brain_volume=1700)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1700},
             #'do(ventricle_volume=0)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0},
-            'do(ventricle_volume=0.5)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.2},
-            'do(ventricle_volume=1.0)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.8},
+            'do(ventricle_volume=75)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 75},
+            'do(ventricle_volume=160)': {'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 160},
             'do(age=45)': {'age': torch.ones_like(batch['age']) * 45},
             'do(age=80)': {'age': torch.ones_like(batch['age']) * 80},
             #'do(age=120)': {'age': torch.ones_like(batch['age']) * 120},
             'do(sex=0)': {'sex': torch.zeros_like(batch['sex'])},
             'do(sex=1)': {'sex': torch.ones_like(batch['sex'])},
-            'do(brain_volume=1, ventricle_volume=1)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1,
-                                                              'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 1},
-            'do(brain_volume=0.5, ventricle_volume=0.5)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 0.5,
-                                                                 'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 0.5}
+            'do(brain_volume=1200, ventricle_volume=50)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1200,
+                                                              'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 50},
+            'do(brain_volume=1700, ventricle_volume=25)': {'brain_volume': torch.ones_like(batch['brain_volume']) * 1700,
+                                                                 'ventricle_volume': torch.ones_like(batch['ventricle_volume']) * 25}
         }
 
         return counterfactuals
@@ -350,11 +350,10 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def log_img_grid(self, tag, imgs, normalize=True, save_img=False, **kwargs):
         if save_img:
-            imgs2d = imgs[:,:,:,imgs.shape[-2]//2,:]
             p = os.path.join(self.trainer.logger.experiment.log_dir, f'{tag}.png')
-            torchvision.utils.save_image(imgs2d, p)
-        grid = torchvision.utils.make_grid(imgs2d, normalize=normalize, **kwargs)
-        self.logger.experiment.add_image(tag, grid, self.current_epoch)
+            #torchvision.utils.save_image(imgs, p)
+            grid = torchvision.utils.make_grid(imgs, normalize=normalize, **kwargs)
+            self.logger.experiment.add_image(tag, grid, self.current_epoch)
 
     def get_batch(self, loader):
         batch = next(iter(self.val_loader))
@@ -398,9 +397,9 @@ class BaseCovariateExperiment(pl.LightningModule):
         obs = {'x': x, 'age': age, 'sex': sex, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume}
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
-        self.log_img_grid(tag+'/axial', torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0)) 
-        self.log_img_grid(tag+'/sagittal', torch.cat([x[:,:,:,x.shape[-2]//2,:], recon[:,:,:,recon.shape[-2]//2,:]], 0)) 
-        self.log_img_grid(tag+'/coronal', torch.cat([x[:,:,x.shape[-3]//2,:,:], recon[:,:,recon.shape[-3]//2,:,:]], 0)) 
+        self.log_img_grid(tag+'/axial', torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0), save_img=True) 
+        self.log_img_grid(tag+'/sagittal', torch.cat([x[:,:,:,x.shape[-2]//2,:], recon[:,:,:,recon.shape[-2]//2,:]], 0), save_img=True) 
+        self.log_img_grid(tag+'/coronal', torch.cat([x[:,:,x.shape[-3]//2,:,:], recon[:,:,recon.shape[-3]//2,:,:]], 0), save_img=True) 
         self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3, 4))), self.current_epoch) # TODO 1,2,3 added:
 
     def build_counterfactual(self, tag, obs, conditions, absolute=None):
@@ -443,11 +442,11 @@ class BaseCovariateExperiment(pl.LightningModule):
             sampled_brain_volume = sample_trace.nodes['brain_volume']['value']
             sampled_ventricle_volume = sample_trace.nodes['ventricle_volume']['value']
 
-            #self.log_img_grid('samples', samples.data[:8]) # TODO
+            self.log_img_grid('samples', samples.data[:8]) # TODO
 
             cond_data = {'brain_volume': self.brain_volume_range, 'ventricle_volume': self.ventricle_volume_range, 'z': self.z_range}
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
-            #self.log_img_grid('cond_samples', samples.data, nrow=3)
+            self.log_img_grid('cond_samples', samples.data[:,:,:,48,:], nrow=3, save_img=True)
 
             obs_batch = self.prep_batch(self.get_batch(self.val_loader)) # TODO
 
@@ -464,7 +463,7 @@ class BaseCovariateExperiment(pl.LightningModule):
 
             obs_batch = {k: v[:8] for k, v in obs_batch.items()}
 
-            self.log_img_grid('input', obs_batch['x'], save_img=True) # TODO
+            self.log_img_grid('input', obs_batch['x'][:,:,:,48,:], save_img=True) # TODO
 
             if hasattr(self.pyro_model, 'reconstruct'):
                 self.build_reconstruction(**obs_batch)
@@ -499,8 +498,6 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     @classmethod
     def add_arguments(cls, parser):
-        #parser.add_argument('--data_dir', default="/vol/biomedic2/bglocker/gemini/UKBB/t0/", type=str, help="data dir (default: %(default)s)")  # noqa: E501
-        #parser.add_argument('--split_dir', default="/vol/biomedic2/np716/data/gemini/ukbb/ventricle_brain/", type=str, help="split dir (default: %(default)s)")  # noqa: E501
         parser.add_argument('--sample_img_interval', default=1, type=int, help="interval in which to sample and log images (default: %(default)s)")
         parser.add_argument('--train_batch_size', default=4, type=int, help="train batch size (default: %(default)s)")
         parser.add_argument('--test_batch_size', default=4, type=int, help="test batch size (default: %(default)s)")
