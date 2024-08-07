@@ -4,6 +4,7 @@ from pyro.distributions import (
     Normal, TorchDistribution, LowRankMultivariateNormal
 )
 from torch import nn
+import torch.functional as F
 
 from deepscm.distributions.params import MixtureParams
 
@@ -27,8 +28,9 @@ class _DeepIndepNormal(DeepConditional):
         return mean, logvar
 
     def predict(self, x) -> Independent:
-        mean, logvar = self(x)
-        std = (.5 * logvar).exp()
+        mean, logstd = self(x)
+        #std = (.5 * logvar).exp() # change from exp to softplus for stability
+        std = F.softplus(logstd) + 1e-5
         event_ndim =len(mean.shape[1:])  #mean.shape[0] #  # keep only batch dimension
         return Normal(mean, std).to_event(event_ndim)
 
