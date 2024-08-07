@@ -4,8 +4,7 @@ from pyro.distributions import (
     Normal, TorchDistribution, LowRankMultivariateNormal
 )
 from torch import nn
-import torch.functional as F
-
+from torch.nn import functional as F
 from deepscm.distributions.params import MixtureParams
 
 
@@ -83,7 +82,7 @@ class DeepMultivariateNormal(DeepConditional):
     def forward(self, x):
         h = self.backbone(x)
         mean = self.mean_head(h)
-        diag = self.logdiag_head(h).exp()
+        diag = F.softplus(self.logdiag_head(h)) # .exp() TODO: exp() to softplus
         lower = self.lower_head(h)
         scale_tril = _assemble_tril(diag, lower)
         return mean, scale_tril
@@ -108,7 +107,7 @@ class DeepLowRankMultivariateNormal(DeepConditional):
     def forward(self, x):
         h = self.backbone(x)
         mean = self.mean_head(h)
-        diag = self.logdiag_head(h).exp()
+        diag = F.softplus(self.logdiag_head(h)) #.exp() TODO: softplus
         factors = self.factor_head(h).view(x.shape[0], self.latent_dim, self.rank)
 
         return mean, diag, factors

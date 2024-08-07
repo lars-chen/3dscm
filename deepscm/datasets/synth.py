@@ -34,7 +34,7 @@ class  NvidiaDataset(Dataset):
         # load labels
         item = dict()
         item["age"] = self.subjects["age"][index]
-        item["sex"] = 1 if self.subjects["sex"][index] == "M" else 0
+        item["sex"] = self.subjects["sex"][index]
         item["brain_volume"] = self.subjects["brain_vol"][index]  
         item["ventricle_volume"] = self.subjects["ventricle_vol"][index] 
     
