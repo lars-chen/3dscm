@@ -42,8 +42,9 @@ class  NvidiaDataset(Dataset):
         participant_id = str(self.subjects["subject"][index])
         participant_id = '00000'[:5-len(participant_id)] + participant_id
         img_dir = f"{self.data_dir}/{participant_id}.nii.gz"
-        img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] #8:212
+        img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] * 255 #8:212
         img = resize_data_volume_by_scale(img, 0.47)[np.newaxis, :, :, :] #0.94
+        #img[img ]
         item["image"] = (img - img.min())/(img.max() - img.min()) # TODO better normalization scheme...
         return item
     

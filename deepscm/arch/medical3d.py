@@ -285,4 +285,4 @@ class Decoder3D(nn.Module):
             x = block(x)
         x = self.act_fnc(x)
 
-        return torch.tanh(self.conv_out(x)) # TODO: probably not tanh!!!
+        return self.conv_out(x)# torch.tanh(self.conv_out(x)) # TODO: probably not tanh!!! self.conv_out(x) #
