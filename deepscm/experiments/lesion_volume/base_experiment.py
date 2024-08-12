@@ -180,6 +180,9 @@ class BaseCovariateExperiment(pl.LightningModule):
         
         self.z_range = torch.randn([1, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat((9, 1))
 
+        self.pyro_model.score_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['score']).log().mean().to(self.torch_device).float()
+        self.pyro_model.score_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['score']).log().std().to(self.torch_device).float()
+
         self.pyro_model.age_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['age']).log().mean().to(self.torch_device).float()
         self.pyro_model.age_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['age']).log().std().to(self.torch_device).float()
 
@@ -193,7 +196,8 @@ class BaseCovariateExperiment(pl.LightningModule):
             print(f'set ventricle_volume_flow_lognorm {self.pyro_model.ventricle_volume_flow_lognorm.loc} +/- {self.pyro_model.ventricle_volume_flow_lognorm.scale}')  # noqa: E501
             print(f'set age_flow_lognorm {self.pyro_model.age_flow_lognorm.loc} +/- {self.pyro_model.age_flow_lognorm.scale}')
             print(f'set brain_volume_flow_lognorm {self.pyro_model.brain_volume_flow_lognorm.loc} +/- {self.pyro_model.brain_volume_flow_lognorm.scale}')
-
+            print(f'set score_flow_lognorm {self.pyro_model.score_flow_lognorm.loc} +/- {self.pyro_model.score_flow_lognorm.scale}')
+    
     def configure_optimizers(self):
         pass
 

@@ -34,6 +34,7 @@ class  NvidiaDataset(Dataset):
         # load labels
         item = dict()
         item["age"] = self.subjects["age"][index]
+        item["score"] = self.subjects["score"][index]
         item["sex"] = self.subjects["sex"][index]
         item["brain_volume"] = self.subjects["brain_vol"][index]  
         item["ventricle_volume"] = self.subjects["ventricle_vol"][index] 
@@ -51,7 +52,8 @@ class  NvidiaDataset(Dataset):
     @staticmethod
     def _prepare_item(item):
         eps = 1e-10
-        item["age"] = torch.as_tensor(item["age"], dtype=torch.float) 
+        item["age"] = torch.as_tensor(item["age"], dtype=torch.float)
+        item["score"] = torch.as_tensor(item["score"], dtype=torch.float) 
         item["sex"] = torch.as_tensor(item["sex"], dtype=torch.float)
         item["brain_volume"] = torch.as_tensor(item["brain_volume"], dtype=torch.float) + eps
         item["ventricle_volume"] = torch.as_tensor(item["ventricle_volume"], dtype=torch.float) + eps
