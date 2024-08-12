@@ -7,7 +7,7 @@ from pyro.distributions.conditional import ConditionalTransformedDistribution
 from deepscm.distributions.transforms.affine import ConditionalAffineTransform
 from pyro.nn import DenseNN
 
-from deepscm.experiments.synthetic_medical.synth.sem_vi.base_sem_experiment import BaseVISEM, MODEL_REGISTRY
+from deepscm.experiments.lesion_volume.synth.sem_vi.base_sem_experiment import BaseVISEM, MODEL_REGISTRY
 
 
 class ConditionalVISEM(BaseVISEM):
