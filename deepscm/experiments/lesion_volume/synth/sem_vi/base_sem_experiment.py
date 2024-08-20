@@ -398,7 +398,7 @@ class SVIExperiment(BaseCovariateExperiment):
         return metrics
 
     def prep_batch(self, batch):
-        x = batch['image'] * 255.
+        x = batch['image']# * 255.
         age = batch['age'].unsqueeze(1).float()
         sex = batch['sex'].unsqueeze(1).float()
         ventricle_volume = batch['ventricle_volume'].unsqueeze(1).float()
@@ -406,8 +406,8 @@ class SVIExperiment(BaseCovariateExperiment):
 
         x = x.float()
 
-        if self.training:
-            x += torch.rand_like(x)
+        # if self.training:
+        #     x += torch.rand_like(x)
 
         return {'x': x, 'age': age, 'sex': sex, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume}
 

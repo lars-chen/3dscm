@@ -6,7 +6,7 @@ from pyro.distributions import TransformedDistribution
 from pyro.infer.reparam.transform import TransformReparam
 from torch.distributions import Independent
 
-from deepscm.datasets.synth import NvidiaDataset
+from deepscm.datasets.atrophy_data import NvidiaDataset
 from pyro.distributions.transforms import ComposeTransform, SigmoidTransform, AffineTransform
 
 import torchvision.utils
@@ -443,7 +443,6 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def sample_images(self):
         with torch.no_grad():
-            # TODO: redo all this....
             sample_trace = pyro.poutine.trace(self.pyro_model.sample).get_trace(self.hparams.test_batch_size)
 
             samples = sample_trace.nodes['x']['value']

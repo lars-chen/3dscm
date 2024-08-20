@@ -10,10 +10,10 @@ def resize_data_volume_by_scale(data, scale):
    Resize the data based on the provided scale
    """
    scale_list = [scale,scale,scale]
-   return ndimage.interpolation.zoom(data, scale_list, order=0)
+   return ndimage.interpolation.zoom(data, scale_list, order=5)
 
 class  NvidiaDataset(Dataset):
-    def __init__(self, data_dir = "../../atrophy_bet", train=True):
+    def __init__(self, data_dir = "../../norm_BET", train=True):
         super().__init__()
 
         self.data_dir = data_dir
@@ -38,24 +38,23 @@ class  NvidiaDataset(Dataset):
         item["sex"] = self.subjects["sex"][index]
         item["brain_volume"] = self.subjects["brain_vol"][index]  
         item["ventricle_volume"] = self.subjects["ventricle_vol"][index] 
-    
+        
         # load image
         participant_id = str(self.subjects["subject"][index])
-        participant_id = '00000'[:5-len(participant_id)] + participant_id
-        img_dir = f"{self.data_dir}/{participant_id}.nii.gz"
-        img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] * 255 #8:212
+        participant_id = '00000'[:5-len(participant_id)] + participant_id + "_norm"
+        img_dir = f"{self.data_dir}/{participant_id}.nii.gz"    
+        img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] # #8:212
         img = resize_data_volume_by_scale(img, 0.47)[np.newaxis, :, :, :] #0.94
-        #img[img ]
-        item["image"] = (img - img.min())/(img.max() - img.min()) # TODO better normalization scheme...
+        item["image"] = np.clip(img, 0, 1.5)*255/1.5 # TODO: map to 255?
         return item
     
-    @staticmethod
-    def _prepare_item(item):
-        eps = 1e-10
-        item["age"] = torch.as_tensor(item["age"], dtype=torch.float)
-        item["score"] = torch.as_tensor(item["score"], dtype=torch.float) 
-        item["sex"] = torch.as_tensor(item["sex"], dtype=torch.float)
-        item["brain_volume"] = torch.as_tensor(item["brain_volume"], dtype=torch.float) + eps
-        item["ventricle_volume"] = torch.as_tensor(item["ventricle_volume"], dtype=torch.float) + eps
-        item["image"] = torch.as_tensor(item["image"][10:150, 20:202, :140], dtype=torch.float)
-        return item
+    # @staticmethod
+    # def _prepare_item(item):
+    #     eps = 1e-10
+    #     item["age"] = torch.as_tensor(item["age"], dtype=torch.float)
+    #     item["score"] = torch.as_tensor(item["score"], dtype=torch.float) 
+    #     item["sex"] = torch.as_tensor(item["sex"], dtype=torch.float)
+    #     item["brain_volume"] = torch.as_tensor(item["brain_volume"], dtype=torch.float) + eps
+    #     item["ventricle_volume"] = torch.as_tensor(item["ventricle_volume"], dtype=torch.float) + eps
+    #     item["image"] = torch.as_tensor(item["image"][10:150, 20:202, :140], dtype=torch.float)
+    #     return item
