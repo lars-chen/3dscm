@@ -53,9 +53,8 @@ class Lambda(torch.nn.Module):
 
 
 class BaseVISEM(BaseSEM):
-    context_dim = 0
 
-    def __init__(self, beta:float, latent_dim: int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,64,96,64), blocks: tuple = (1,2,4,6,8),
+    def __init__(self, beta:float, latent_dim: int, context_dim:int, logstd_init: float = -5, ch_multi = 16, image_shape=(1,64,96,64), blocks: tuple = (1,2,4,6,8),
                 use_upconv: bool = False, decoder_type: str = 'fixed_var', decoder_cov_rank: int = 10, **kwargs):
         super().__init__(**kwargs)
 
@@ -67,6 +66,7 @@ class BaseVISEM(BaseSEM):
         self.blocks = blocks
         self.ch_multi = ch_multi
         self.latent_channels = latent_dim
+        self.context_dim = context_dim
 
         self.use_upconv = use_upconv
         self.decoder_type = decoder_type
@@ -75,7 +75,7 @@ class BaseVISEM(BaseSEM):
         # decoder parts
         channel_in=1
         
-        decoder = Decoder3D(channel_in, ch=ch_multi, blocks=self.blocks, latent_dim=self.latent_dim, latent_channels=self.latent_channels, image_shape=self.img_shape,
+        decoder = Decoder3D(channel_in, ch=ch_multi, blocks=self.blocks, latent_dim=self.latent_dim, context_dim=self.context_dim, latent_channels=self.latent_channels, image_shape=self.img_shape,
                                num_res_blocks=1, norm_type="bn", deep_model=False)
 
         if self.decoder_type == 'fixed_var':
@@ -306,7 +306,8 @@ class BaseVISEM(BaseSEM):
         parser.add_argument('--latent_dim', default=100, type=int, help="latent dimension of model (default: %(default)s)")
         parser.add_argument('--blocks', default=(1,2,4,8,16,16), type=tuple_type, help="lr of deep part (default: %(default)s)")
         parser.add_argument('--ch_multi', default=32, type=int, help="lr of deep part (default: %(default)s)")
-        
+        parser.add_argument('--context_dim', default=2, type=int, help="context dimension of latent space")
+
         parser.add_argument('--logstd_init', default=-5, type=float, help="init of logstd (default: %(default)s)")
         parser.add_argument('--decoder_type', default='fixed_var', help="var type (default: %(default)s)",
             choices=['fixed_var', 'learned_var', 'independent_gaussian', 'sharedvar_multivariate_gaussian', 'multivariate_gaussian',

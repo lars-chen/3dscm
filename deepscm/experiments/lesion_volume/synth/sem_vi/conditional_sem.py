@@ -11,7 +11,7 @@ from deepscm.experiments.lesion_volume.synth.sem_vi.base_sem_experiment import B
 
 
 class ConditionalVISEM(BaseVISEM):
-    context_dim = 2
+    context_dim = 3
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -26,35 +26,50 @@ class ConditionalVISEM(BaseVISEM):
         self.brain_volume_flow_components = ConditionalAffineTransform(context_nn=brain_volume_net, event_dim=0)
         self.brain_volume_flow_transforms = [self.brain_volume_flow_components, self.brain_volume_flow_constraint_transforms]
 
+        # lesion_volume flow
+        lesion_volume_net = DenseNN(1, [8, 16], param_dims=[1, 1], nonlinearity=torch.nn.LeakyReLU(.1))
+        self.lesion_volume_flow_components = ConditionalAffineTransform(context_nn=lesion_volume_net, event_dim=0)
+        self.lesion_volume_flow_transforms = [self.lesion_volume_flow_components, self.lesion_volume_flow_constraint_transforms]
+
     @pyro_method
     def pgm_model(self):
-        # TODO: update to match synthetic SCM
+        
+        # Sex Node
         sex_dist = Bernoulli(logits=self.sex_logits).to_event(1)
 
         _ = self.sex_logits
 
         sex = pyro.sample('sex', sex_dist)
 
+        # Age Node
         age_base_dist = Normal(self.age_base_loc, self.age_base_scale).to_event(1)
         age_dist = TransformedDistribution(age_base_dist, self.age_flow_transforms)
 
         age = pyro.sample('age', age_dist)
         age_ = self.age_flow_constraint_transforms.inv(age)
-        # pseudo call to thickness_flow_transforms to register with pyro
-        _ = self.age_flow_components
+        _ = self.age_flow_components  # pseudo call to register w/ pyro
+        
+        # Score Node
+        score_base_dist = Normal(self.score_base_loc, self.score_base_scale).to_event(1)
+        score_dist = TransformedDistribution(score_base_dist, self.score_flow_transforms)
 
+        score = pyro.sample('score', score_dist)
+        score_ = self.score_flow_constraint_transforms.inv(score)
+        _ = self.score_flow_components # pseudo call to register w/ pyro
+
+        # Brain volume node
         brain_context = torch.cat([sex, age_], 1)
 
         brain_volume_base_dist = Normal(self.brain_volume_base_loc, self.brain_volume_base_scale).to_event(1)
         brain_volume_dist = ConditionalTransformedDistribution(brain_volume_base_dist, self.brain_volume_flow_transforms).condition(brain_context)
 
         brain_volume = pyro.sample('brain_volume', brain_volume_dist)
-        # pseudo call to intensity_flow_transforms to register with pyro
-        _ = self.brain_volume_flow_components
+        _ = self.brain_volume_flow_components # pseudo call to register w/ pyro
 
         brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)
 
-        ventricle_context = torch.cat([age_, brain_volume_], 1)
+        # Ventricle volume node
+        ventricle_context = torch.cat([sex, age_], 1)
 
         ventricle_volume_base_dist = Normal(self.ventricle_volume_base_loc, self.ventricle_volume_base_scale).to_event(1)
         ventricle_volume_dist = ConditionalTransformedDistribution(ventricle_volume_base_dist, self.ventricle_volume_flow_transforms).condition(ventricle_context)  # noqa: E501
@@ -62,37 +77,50 @@ class ConditionalVISEM(BaseVISEM):
         ventricle_volume = pyro.sample('ventricle_volume', ventricle_volume_dist)
         # pseudo call to intensity_flow_transforms to register with pyro
         _ = self.ventricle_volume_flow_components
+        
+        # Lesion volume node
+        lesion_context = torch.cat([score_], 1)
 
-        return age, sex, ventricle_volume, brain_volume
+        lesion_volume_base_dist = Normal(self.lesion_volume_base_loc, self.lesion_volume_base_scale).to_event(1)
+        lesion_volume_dist = ConditionalTransformedDistribution(lesion_volume_base_dist, self.lesion_volume_flow_transforms).condition(lesion_context)  # noqa: E501
+
+        lesion_volume = pyro.sample('lesion_volume', lesion_volume_dist)
+        # pseudo call to intensity_flow_transforms to register with pyro
+        _ = self.lesion_volume_flow_components
+
+        return age, score, sex, ventricle_volume, brain_volume, lesion_volume
 
     @pyro_method
     def model(self,):
-        age, sex, ventricle_volume, brain_volume = self.pgm_model() # TODO check if sex is working properly
+        age, score, sex, ventricle_volume, brain_volume, lesion_volume = self.pgm_model() # TODO check if sex is working properly
 
         ventricle_volume_ = self.ventricle_volume_flow_constraint_transforms.inv(ventricle_volume)
         brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)
+        lesion_volume_ = self.lesion_volume_flow_constraint_transforms.inv(lesion_volume)
 
         with pyro.poutine.scale(scale=self.beta):
             z = pyro.sample('z', Normal(self.z_loc, self.z_scale).to_event(1))
 
-        latent = torch.cat([z, ventricle_volume_, brain_volume_], 1)
+        latent = torch.cat([z, ventricle_volume_, brain_volume_, lesion_volume_], 1)
 
         x_dist = self._get_transformed_x_dist(latent)
 
         x = pyro.sample('x', x_dist)
 
-        return x, z, age, sex, ventricle_volume, brain_volume
+        return x, z, age, score, sex, ventricle_volume, brain_volume, lesion_volume
 
     @pyro_method
-    def guide(self, x, age, sex, ventricle_volume, brain_volume):
+    def guide(self, x, age, score, sex, ventricle_volume, brain_volume, lesion_volume):
         with pyro.plate('observations', x.shape[0]):
             hidden = self.encoder(x)
 
             ventricle_volume_ = self.ventricle_volume_flow_constraint_transforms.inv(ventricle_volume)
 
             brain_volume_ = self.brain_volume_flow_constraint_transforms.inv(brain_volume)
+            
+            lesion_volume_ = self.lesion_volume_flow_constraint_transforms.inv(lesion_volume)
 
-            hidden = torch.cat([hidden, ventricle_volume_, brain_volume_], 1)
+            hidden = torch.cat([hidden, ventricle_volume_, brain_volume_, lesion_volume_], 1)
 
             with pyro.poutine.scale(scale=self.beta):
                 latent_dist = self.latent_encoder.predict(hidden)

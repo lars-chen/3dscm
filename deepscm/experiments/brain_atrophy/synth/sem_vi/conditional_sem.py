@@ -11,8 +11,6 @@ from deepscm.experiments.brain_atrophy.synth.sem_vi.base_sem_experiment import B
 
 
 class ConditionalVISEM(BaseVISEM):
-    context_dim = 2
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 

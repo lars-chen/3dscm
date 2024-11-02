@@ -13,7 +13,7 @@ def resize_data_volume_by_scale(data, scale):
    return ndimage.interpolation.zoom(data, scale_list, order=5)
 
 class  NvidiaDataset(Dataset):
-    def __init__(self, data_dir = "../../norm_BET", train=True):
+    def __init__(self, data_dir = "../../atrophy_preprocessed", train=True): # "../../norm_BET"
         super().__init__()
 
         self.data_dir = data_dir
@@ -43,9 +43,9 @@ class  NvidiaDataset(Dataset):
         participant_id = str(self.subjects["subject"][index])
         participant_id = '00000'[:5-len(participant_id)] + participant_id + "_norm"
         img_dir = f"{self.data_dir}/{participant_id}.nii.gz"    
-        img = nib.load(img_dir).get_fdata()[12:148, 8:212, :136] # #8:212
-        img = resize_data_volume_by_scale(img, 0.47)[np.newaxis, :, :, :] #0.94
-        item["image"] = np.clip(img, 0, 1.5)*255/1.5 # TODO: map to 255?
+        img = nib.load(img_dir).get_fdata()#[12:148, 8:212, :136] # #8:212
+        #img = resize_data_volume_by_scale(img, 0.47)[np.newaxis, :, :, :] #0.94
+        item["image"] = img #np.clip(img, 0, 1.5)*255/1.5 # TODO: map to 255?
         return item
     
     # @staticmethod

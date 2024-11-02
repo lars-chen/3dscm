@@ -1,5 +1,5 @@
-from deepscm.experiments.synthetic_medical import synth  # noqa: F401
-from deepscm.experiments.synthetic_medical.base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
+from deepscm.experiments.lesion_volume import synth  # noqa: F401
+from deepscm.experiments.lesion_volume.base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
 
 
 if __name__ == '__main__':

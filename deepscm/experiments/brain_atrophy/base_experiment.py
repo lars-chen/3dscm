@@ -8,7 +8,7 @@ from torch.distributions import Independent
 
 from deepscm.datasets.atrophy_data import NvidiaDataset
 from pyro.distributions.transforms import ComposeTransform, SigmoidTransform, AffineTransform
-
+from scipy import ndimage
 import torchvision.utils
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -453,7 +453,9 @@ class BaseCovariateExperiment(pl.LightningModule):
 
             cond_data = {'brain_volume': self.brain_volume_range, 'ventricle_volume': self.ventricle_volume_range, 'z': self.z_range}
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
-            self.log_img_grid('cond_samples', samples.data[:,:,:,48,:], nrow=3, save_img=True)
+            self.log_img_grid('cond_samples_ax', samples.data[:,:,:,48,:], nrow=3, save_img=True)
+            self.log_img_grid('cond_samples_sag', samples.data[:,:,:,:,37], nrow=3, save_img=True)
+
 
             obs_batch = self.prep_batch(self.get_batch(self.val_loader)) # TODO
 

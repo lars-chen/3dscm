@@ -92,7 +92,7 @@ class ResUp(nn.Module):
     Residual up sampling block for the decoder
     """
 
-    def __init__(self, channel_in, channel_out, kernel_size=3, scale_factor=2, norm_type="bn"): # kernel size 3
+    def __init__(self, channel_in, channel_out, kernel_size=5, scale_factor=2, norm_type="bn"): # kernel size 3 TODO
         super(ResUp, self).__init__()
         self.norm1 = get_norm_layer(channel_in, norm_type=norm_type)
 
@@ -196,9 +196,6 @@ class Encoder3D(nn.Module):
 
         for _ in range(num_res_blocks):
             self.layer_blocks.append(ResBlock(widths_out[-1] * ch, widths_out[-1] * ch, norm_type=norm_type))
-
-        #self.conv_mu = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1) # TODO k=1
-        #self.conv_log_var = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1)
         
         self.final_conv = nn.Conv3d(widths_out[-1] * ch, self.latent_channels, 1, 1) # 64 --> latent_channels
         
@@ -228,7 +225,7 @@ class Encoder3D(nn.Module):
         x = self.fc(x)
         
 
-        return x#, mu, log_var
+        return x
 
 
 class Decoder3D(nn.Module):
@@ -237,7 +234,7 @@ class Decoder3D(nn.Module):
     Built to be a mirror of the encoder block
     """
 
-    def __init__(self, channels, ch, blocks, latent_dim, latent_channels, image_shape, num_res_blocks=1, norm_type="bn",
+    def __init__(self, channels, ch, blocks, latent_dim, context_dim, latent_channels, image_shape, num_res_blocks=1, norm_type="bn",
                  deep_model=False):
         super(Decoder3D, self).__init__()
 
@@ -246,13 +243,14 @@ class Decoder3D(nn.Module):
         self.image_shape = image_shape
         self.latent_channels = latent_channels
         self.latent_dim = latent_dim
+        self.context_dim = context_dim
         
         self.intermediate_shape = np.array(self.image_shape ) / (2**len(blocks))
         self.intermediate_shape[0] = latent_channels
         self.ch = ch
 
         self.fc_in = nn.Sequential(
-            nn.Linear(latent_dim+2, int(np.prod(self.intermediate_shape))),
+            nn.Linear(latent_dim+self.context_dim, int(np.prod(self.intermediate_shape))), #TODO jankyyy af
             nn.BatchNorm1d(int(np.prod(self.intermediate_shape))), 
             nn.LeakyReLU(.1, inplace=True)
         )

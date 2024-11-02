@@ -6,7 +6,7 @@ from pyro.distributions import TransformedDistribution
 from pyro.infer.reparam.transform import TransformReparam
 from torch.distributions import Independent
 
-from deepscm.datasets.atrophy_data import NvidiaDataset
+from deepscm.datasets.lesion_data import NvidiaDataset
 from pyro.distributions.transforms import ComposeTransform, SigmoidTransform, AffineTransform
 
 import torchvision.utils
@@ -183,8 +183,8 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.pyro_model.score_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['score']).log().mean().to(self.torch_device).float()
         self.pyro_model.score_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['score']).log().std().to(self.torch_device).float()
 
-        self.pyro_model.age_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['age']).log().mean().to(self.torch_device).float()
-        self.pyro_model.age_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['age']).log().std().to(self.torch_device).float()
+        self.pyro_model.age_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['age']).float().log().mean().to(self.torch_device)
+        self.pyro_model.age_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['age']).float().log().std().to(self.torch_device)
 
         self.pyro_model.ventricle_volume_flow_lognorm_loc = torch.tensor(self.synth_train.subjects['ventricle_vol']).log().mean().to(self.torch_device).float()
         self.pyro_model.ventricle_volume_flow_lognorm_scale = torch.tensor(self.synth_train.subjects['ventricle_vol']).log().std().to(self.torch_device).float()
@@ -397,8 +397,8 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         self.logger.experiment.add_figure(tag, fig, self.current_epoch)
 
-    def build_reconstruction(self, x, age, sex, ventricle_volume, brain_volume, tag='reconstruction'):
-        obs = {'x': x, 'age': age, 'sex': sex, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume}
+    def build_reconstruction(self, x, age, sex, score, ventricle_volume, brain_volume, lesion_volume, tag='reconstruction'):
+        obs = {'x': x, 'age': age, 'sex': sex, 'score': score, 'ventricle_volume': ventricle_volume, 'brain_volume': brain_volume, 'lesion_volume': lesion_volume}
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
         self.log_img_grid(tag+'/axial', torch.cat([x[:,:,:,:,x.shape[-1]//2], recon[:,:,:,:,recon.shape[-1]//2]], 0), save_img=True) 
@@ -407,11 +407,12 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3, 4))), self.current_epoch) # TODO 1,2,3 added:
 
     def build_counterfactual(self, tag, obs, conditions, absolute=None):
-        _required_data = ('x', 'age', 'sex', 'ventricle_volume', 'brain_volume')
+        _required_data = ('x', 'age', 'sex','score', 'ventricle_volume', 'brain_volume', 'lesion_volume')
         assert set(obs.keys()) == set(_required_data), 'got: {}'.format(tuple(obs.keys()))
 
         imgs = [obs['x']]
         # TODO: decide which kde's to plot in which configuration
+        # TODO: how to add lesion volume into here?
         if absolute == 'brain_volume':
             sampled_kdes = {'orig': {'ventricle_volume': obs['ventricle_volume']}}
         elif absolute == 'ventricle_volume':
@@ -425,6 +426,8 @@ class BaseCovariateExperiment(pl.LightningModule):
             counter = counterfactual['x']
             sampled_brain_volume = counterfactual['brain_volume']
             sampled_ventricle_volume = counterfactual['ventricle_volume']
+            #sampled_lesion_volume = counterfactual['lesion_volume']
+
 
             imgs.append(counter)
             if absolute == 'brain_volume':
@@ -445,6 +448,8 @@ class BaseCovariateExperiment(pl.LightningModule):
             samples = sample_trace.nodes['x']['value']
             sampled_brain_volume = sample_trace.nodes['brain_volume']['value']
             sampled_ventricle_volume = sample_trace.nodes['ventricle_volume']['value']
+            sampled_lesion_volume = sample_trace.nodes['lesion_volume']['value']
+
 
             self.log_img_grid('samples', samples.data[:8]) # TODO
 

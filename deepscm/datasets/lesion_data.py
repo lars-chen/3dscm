@@ -21,11 +21,13 @@ class  NvidiaDataset(Dataset):
         subjects = pd.read_csv(self.data_dir + "/participants_lesioned.csv")
         subjects['ventricle_vol'] = subjects['ventricle_vol']/1e3 # convert to ml
         subjects['brain_vol'] = subjects['brain_vol']/1e3
+        subjects['lesion_vol'] = subjects['true_lesion_vol']/1e3
+
         
         if train:
-            self.subjects = subjects[:4500] # TODO: change to 4500
+            self.subjects = subjects[:500] # TODO: change to 4500
         else:
-            self.subjects = subjects[4500:].reset_index() # TODO change to 4500
+            self.subjects = subjects[4800:].reset_index() # TODO change to 4500
         
     def __len__(self):
         return len(self.subjects)
@@ -39,9 +41,20 @@ class  NvidiaDataset(Dataset):
         item["brain_volume"] = self.subjects["brain_vol"][index]  
         item["ventricle_volume"] = self.subjects["ventricle_vol"][index]
         item["num_lesions"] = self.subjects["lesion_num"][index] 
-        item["lesion_vol"] = self.subjects["true_lesion_vol"][index] 
-
+        item["lesion_volume"] = self.subjects["true_lesion_vol"][index] + 1e-5
         
+        # process centers into indexs        
+        centers = self.subjects["centers"][index]
+        # for char in ' ][)(array':
+        #     centers = centers.replace(char, '')
+        # centers = centers.split(',')
+        # if centers != ['']:
+        #     centers = np.array([int(str) for str in centers]).reshape((-1, 3))
+        # else:
+        #     centers = np.array([])
+        # print(centers)
+        item["centers"] = centers
+
         # load image
         participant_id = str(self.subjects["subject"][index])
         participant_id = '00000'[:5-len(participant_id)] + participant_id
