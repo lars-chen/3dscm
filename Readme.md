@@ -1,8 +1,6 @@
 ## Structural Causal Model for 3D Counterfactual Inference
 
-This repository is currently in progress. It can already be used to generate counterfactual images of MR brain images for 3D medical imaging data using deep structural causal models (DSCM).
-
-This work builds on prior work by [Pawlowski et al. (2019)](https://arxiv.org/pdf/2006.06485). The code in this repository is a fork of their code which can be found [here](https://github.com/biomedia-mira/deepscm/tree/master).
+Abstract: Investigating neurological diseases often involves causal reasoning, such as predicting how brain scans might have differed under alternative treatments. Deep Structural Causal Models (DSCM) enable efficient causal inference using deep learning, showing promise in clinical applications. However, existing DSCMs are largely limited to 2D neuroimaging data and synthetic validation, precluding 3D analysis. We address these gaps by (1) generating a synthetic 3D neuroimaging dataset using a pre-trained diffusion model conditioned on covariates from a ground-truth structural causal model (SCM), and (2) extending DSCMs to 3D via lightweight convolutional neural networks. Our 3D DSCM generates counterfactuals that preserve anatomical structures. When intervening on variables in causal graphs, the model induces anatomical changes in the 3D magnetic resonance images aligned with ground-truth causal effects but underestimates their magnitude, likely due to latent space trade-offs. This work advances 3D causal inference for neuroimaging, providing a benchmark for evaluating counterfactual validity and highlighting challenges in scaling DSCMs to high-dimensional data.
 
 
 ### Training Example:
