@@ -2,7 +2,7 @@
 
 This repository is currently in progress. It can already be used to generate counterfactual images of MR brain images for 3D medical imaging data using deep structural causal models (DSCM).
 
-This work builds on the work done by [Pawlowski et al. (2019)](https://arxiv.org/pdf/2006.06485). The code in this repository is a fork of their code which can be found [here](https://github.com/biomedia-mira/deepscm/tree/master).
+This work builds on prior work by [Pawlowski et al. (2019)](https://arxiv.org/pdf/2006.06485). The code in this repository is a fork of their code which can be found [here](https://github.com/biomedia-mira/deepscm/tree/master).
 
 
 ### Training Example:
